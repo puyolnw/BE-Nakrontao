@@ -201,15 +201,80 @@ type Shop struct {
 	Link        string   `json:"link"`
 	Images      List     `json:"images"`
 	Published   bool     `json:"published"`
+	PriceFrom   *int     `json:"price_from"`
+	PriceTo     *int     `json:"price_to"`
+	PriceUnit   I18n     `json:"price_unit"`
+	HowToBuy    I18n     `json:"how_to_buy"`
+	Story       I18n     `json:"story"`
+	Ships       bool     `json:"ships"`
+	Sellers     Sellers  `json:"sellers"`
+}
+
+// Seller is one household or shop that sells a product. Only people who agreed to be
+// published may be entered: everything here is shown on the public site.
+type Seller struct {
+	Name    string   `json:"name"`
+	Village string   `json:"village"`
+	Phone   string   `json:"phone"`
+	Line    string   `json:"line"`
+	Wechat  string   `json:"wechat"`
+	Hours   string   `json:"hours"`
+	Lat     *float64 `json:"lat"`
+	Lon     *float64 `json:"lon"`
+	Note    I18n     `json:"note"`
+}
+
+// Sellers encodes nil as [] so the NOT NULL jsonb column accepts it.
+type Sellers []Seller
+
+func (l Sellers) MarshalJSON() ([]byte, error) {
+	if l == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]Seller(l))
+}
+
+func (v Seller) validate(i int) error {
+	f := fmt.Sprintf("sellers[%d]", i)
+	if strings.TrimSpace(v.Name) == "" {
+		return fmt.Errorf("%s.name is required", f)
+	}
+	if (v.Lat == nil) != (v.Lon == nil) {
+		return fmt.Errorf("%s: lat and lon go together", f)
+	}
+	if v.Lat != nil && (*v.Lat < -90 || *v.Lat > 90 || *v.Lon < -180 || *v.Lon > 180) {
+		return fmt.Errorf("%s: lat/lon out of range", f)
+	}
+	return firstErr(
+		checkLen(f+".name", v.Name, 200), checkLen(f+".village", v.Village, 100),
+		checkLen(f+".phone", v.Phone, 40), checkLen(f+".line", v.Line, 100),
+		checkLen(f+".wechat", v.Wechat, 100), checkLen(f+".hours", v.Hours, 200),
+		v.Note.check(f+".note", 1000, false),
+	)
 }
 
 func (s Shop) Validate() error {
-	return firstErr(
+	errs := []error{
 		oneOf("kind", s.Kind, "shop", "food", "stay", "product"),
 		s.Name.check("name", 200, true), s.Products.check("products", 5000, false),
 		s.Description.check("description", 10_000, false), checkLen("contact", s.Contact, 300),
 		checkURL("link", s.Link), checkURLs("images", s.Images),
-	)
+		s.PriceUnit.check("price_unit", 60, false), s.HowToBuy.check("how_to_buy", 3000, false),
+		s.Story.check("story", 10_000, false),
+	}
+	if (s.PriceFrom != nil && *s.PriceFrom < 0) || (s.PriceTo != nil && *s.PriceTo < 0) {
+		errs = append(errs, errors.New("price must not be negative"))
+	}
+	if s.PriceFrom != nil && s.PriceTo != nil && *s.PriceTo < *s.PriceFrom {
+		errs = append(errs, errors.New("price_to must be at least price_from"))
+	}
+	if len(s.Sellers) > 50 {
+		errs = append(errs, errors.New("sellers: too many items"))
+	}
+	for i, v := range s.Sellers {
+		errs = append(errs, v.validate(i))
+	}
+	return firstErr(errs...)
 }
 
 type News struct {

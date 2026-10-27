@@ -71,7 +71,7 @@ func Register(mux *http.ServeMux, db *pgxpool.Pool, editor func(http.Handler) ht
 		PublicCond: "published", Order: "starts_at", HasUpdated: true, Filter: eventFilter}).Mount(mux, "events", editor)
 
 	(&Resource[Shop]{DB: db, Name: "shop", Table: "shops",
-		Columns:    []string{"name", "kind", "products", "description", "lat", "lon", "contact", "link", "images", "published"},
+		Columns:    []string{"name", "kind", "products", "description", "lat", "lon", "contact", "link", "images", "published", "price_from", "price_to", "price_unit", "how_to_buy", "story", "ships", "sellers"},
 		PublicCond: "published", Order: "id", HasUpdated: true,
 		Filter: search("kind", "name", "products")}).Mount(mux, "shops", editor)
 
