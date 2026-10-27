@@ -220,20 +220,4 @@ INSERT INTO news(title, body, cover_url, is_banner, published_at) VALUES
  'https://images.unsplash.com/photo-1750433835485-b1be2eacc19a?auto=format&fit=crop&w=1200&q=75', false, now() - interval '45 days');
 
 -- ---------------------------------------------------------------- local products (from the subdistrict motto)
-INSERT INTO shops(name, kind, products, description, contact, images) VALUES
-('{"th":"ผ้าไหมมัดหมี่เมืองเตา","zh":"孟涛扎染丝绸","en":"Mueang Tao mudmee silk"}','product',
- '{"th":"ผ้าไหมมัดหมี่ทอมือ","zh":"手工扎染丝绸","en":"Hand-woven mudmee silk"}',
- '{"th":"\"งามวิไลไหมมัดหมี่\" ของดีตามคำขวัญตำบลเมืองเตา ชุมชนมีกิจกรรมทอผ้าเพื่อสืบทอดภูมิปัญญาและสร้างรายได้ รอข้อมูลกลุ่มผู้ผลิตและช่องทางติดต่อจากชุมชน","zh":"孟涛乡标语中的“扎染丝绸秀丽”。社区开展织布活动以传承技艺、增加收入。生产小组及联系方式待社区提供。","en":"Lovely mudmee silk, named in the subdistrict motto. The village weaves to keep the craft alive and earn income. Producer group and contact details to be provided by the community."}',
- '', ARRAY['https://images.unsplash.com/photo-1569909115134-a0426936c879?auto=format&fit=crop&w=1200&q=75']),
-('{"th":"หมวกจักสาน","zh":"手工编织帽","en":"Woven hats"}','product',
- '{"th":"หมวกและเครื่องจักสาน","zh":"编织帽与编织品","en":"Woven hats and basketry"}',
- '{"th":"\"รู้กันดีหมวกจักสาน\" งานฝีมือที่ขึ้นชื่อของตำบลเมืองเตา รอข้อมูลกลุ่มผู้ผลิตและช่องทางติดต่อจากชุมชน","zh":"孟涛乡标语中的“编织帽远近闻名”。生产小组及联系方式待社区提供。","en":"Well-known woven hats, named in the subdistrict motto. Producer and contact details to be provided by the community."}',
- '', ARRAY['https://images.unsplash.com/photo-1747396108528-682b02327818?auto=format&fit=crop&w=1200&q=75']),
-('{"th":"ข้าวหอมมะลิ 105 ทุ่งกุลา","zh":"古拉平原茉莉香米105","en":"Thung Kula Hom Mali 105 rice"}','product',
- '{"th":"ข้าวหอมมะลิ 105","zh":"茉莉香米105","en":"Hom Mali 105 jasmine rice"}',
- '{"th":"\"ถิ่นข้าวหอมมะลิหนึ่งศูนย์ห้า\" ข้าวจากนาในทุ่งกุลาร้องไห้ อาชีพหลักของชาวบ้านเมืองเตา รอข้อมูลผู้จำหน่ายจากชุมชน","zh":"孟涛乡标语中的“茉莉香米105之乡”，产自古拉龙海稻田，是村民的主要生计。销售者信息待社区提供。","en":"Home of Hom Mali 105, grown in the Thung Kula fields that are the village main livelihood. Seller details to be provided by the community."}',
- '', ARRAY['https://images.unsplash.com/photo-1647167363124-d3567bdcb7df?auto=format&fit=crop&w=1200&q=75']),
-('{"th":"สมุนไพรพื้นบ้าน","zh":"民间草药","en":"Local herbal remedies"}','product',
- '{"th":"สมุนไพรพื้นบ้าน","zh":"民间草药","en":"Folk herbs"}',
- '{"th":"\"สมุนไพรเลื่องลือ\" ชาวบ้านเมืองเตาใช้สมุนไพรรักษาโรคควบคู่กับการแพทย์สมัยใหม่ รอข้อมูลผู้ผลิตและช่องทางติดต่อจากชุมชน","zh":"孟涛乡标语中的“草药声名远扬”。村民将草药与现代医学结合使用。生产者及联系方式待社区提供。","en":"Famed herbs, named in the subdistrict motto; villagers use them alongside modern medicine. Producer details to be provided by the community."}',
- '', ARRAY['https://images.unsplash.com/photo-1569909115134-a0426936c879?auto=format&fit=crop&w=1200&q=75']);
+-- Shops and community products are created by migration 003_community_shops.sql.
