@@ -13,12 +13,4 @@ INSERT INTO news(title, body, cover_url, is_banner, published_at) VALUES
 ('{"th":"เตรียมพบงานบุญประจำปีของชุมชน (ตัวอย่าง)","zh":"社区年度功德节即将到来（示例）","en":"The annual merit festival of the village is coming (sample)"}',
  '{"th":"[ตัวอย่าง] ขอเชิญร่วมงานบุญประจำปีและพิธีสักการะเจ้าพ่อศรีนครเตา รายละเอียดวันเวลาจะประกาศโดยชุมชน","zh":"【示例】诚邀参加年度功德节与西那空涛神祭拜仪式，具体日期由社区公布。","en":"[Sample] Join the annual merit festival and offering ceremony. Dates will be announced by the community."}',
  'https://images.unsplash.com/photo-1789971649652-ae5dfeeaa7b4?auto=format&fit=crop&w=1200&q=75', true, now());
-INSERT INTO shops(name, kind, products, description, lat, lon, contact, images) VALUES
-('{"th":"กลุ่มทอผ้าบ้านเมืองเตา (ตัวอย่าง)","zh":"孟涛村织布小组（示例）","en":"Ban Mueang Tao weaving group (sample)"}','product',
- '{"th":"ผ้าไหม ผ้าฝ้ายทอมือ","zh":"手工丝绸、棉布","en":"Hand-woven silk and cotton"}',
- '{"th":"[ตัวอย่าง] ผลิตภัณฑ์ทอมือของกลุ่มแม่บ้าน","zh":"【示例】妇女小组的手工织品","en":"[Sample] Hand-woven goods by the village women group"}',
- 15.5150, 103.1925, '', ARRAY['https://images.unsplash.com/photo-1569909115134-a0426936c879?auto=format&fit=crop&w=1200&q=75']),
-('{"th":"ครัวอีสานบ้านเมืองเตา (ตัวอย่าง)","zh":"孟涛村东北厨房（示例）","en":"Mueang Tao Isan kitchen (sample)"}','food',
- '{"th":"ส้มตำ ไก่ย่าง ข้าวเหนียว","zh":"青木瓜沙拉、烤鸡、糯米饭","en":"Som tam, grilled chicken, sticky rice"}',
- '{"th":"[ตัวอย่าง] อาหารอีสานพื้นบ้าน","zh":"【示例】地道东北菜","en":"[Sample] Home-style Isan food"}',
- 15.5135, 103.1958, '', ARRAY['https://images.unsplash.com/photo-1647167363124-d3567bdcb7df?auto=format&fit=crop&w=1200&q=75']);
+-- ร้านตัวอย่างย้ายไปอยู่ใน demo.sql / shops_community.sql แล้ว (27 ต.ค. 2569)
