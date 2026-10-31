@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"unicode"
 )
 
 // The visitor chat persona. It applies to Chat only: the eval runner goes through Ask, so research
@@ -76,6 +77,32 @@ var forbiddenTerms = []string{
 	"制造炸弹", "制作炸弹", "贩毒", "买毒品", "洗钱", "贩卖人口", "儿童色情", "恐怖袭击", "化学武器", "买枪", "黑客攻击",
 	"makeabomb", "buildabomb", "buydrugs", "selldrugs", "launder", "humantrafficking", "childporn", "terroristattack",
 	"chemicalweapon", "hackinto", "ransomware", "ignorepreviousinstructions",
+}
+
+// detectLang picks the reply language from the script the visitor wrote in, so the answer follows
+// the question rather than the site's language switch. Thai or Chinese beats Latin, because names
+// like "Si Nakhon Tao" often appear romanised inside them. A tie or no letters keeps the page language.
+func detectLang(question, pageLang string) string {
+	var th, zh, en int
+	for _, r := range question {
+		switch {
+		case unicode.Is(unicode.Thai, r):
+			th++
+		case unicode.Is(unicode.Han, r):
+			zh++
+		case unicode.Is(unicode.Latin, r):
+			en++
+		}
+	}
+	switch {
+	case th > zh:
+		return "th"
+	case zh > th:
+		return "zh"
+	case en > 0 && th == 0:
+		return "en"
+	}
+	return pageLang
 }
 
 // screen answers crisis and clearly forbidden questions without spending an LLM call.

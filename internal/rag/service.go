@@ -184,6 +184,7 @@ func (s *Service) Chat(w http.ResponseWriter, r *http.Request) error {
 	}
 	// PII never leaves for the LLM provider, and only the redacted text is logged.
 	question := RedactPII(in.Question)
+	in.Lang = detectLang(question, in.Lang)
 	var a Answer
 	if reply, ok := screen(in.Lang, question); ok {
 		a = Answer{Answer: reply, Refused: true}

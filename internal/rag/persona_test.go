@@ -19,6 +19,22 @@ func (f fakeLLM) Name() string { return "fake" }
 
 func (f fakeLLM) Complete(context.Context, string, string) (string, error) { return f.reply, f.err }
 
+func TestDetectLang(t *testing.T) {
+	cases := []struct{ q, page, want string }{
+		{"Who is Chao Pho?", "th", "en"},
+		{"师那空涛神是谁？", "en", "zh"},
+		{"เจ้าพ่อคือใคร", "zh", "th"},
+		{"K-001 คืออะไร", "en", "th"},
+		{"Si Nakhon Tao 是谁", "th", "zh"},
+		{"12345 ???", "zh", "zh"},
+	}
+	for _, c := range cases {
+		if got := detectLang(c.q, c.page); got != c.want {
+			t.Errorf("detectLang(%q, %q) = %q, want %q", c.q, c.page, got, c.want)
+		}
+	}
+}
+
 func TestScreen(t *testing.T) {
 	cases := []struct {
 		q    string
