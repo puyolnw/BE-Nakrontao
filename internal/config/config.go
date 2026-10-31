@@ -16,6 +16,9 @@ type Config struct {
 
 	AnthropicKey   string
 	AnthropicModel string
+	LLMURL         string // OpenAI-compatible /chat/completions endpoint
+	LLMKey         string
+	LLMModel       string
 	EmbedURL       string // OpenAI-compatible /v1/embeddings endpoint
 	EmbedKey       string
 	EmbedModel     string
@@ -38,6 +41,9 @@ func Load() (Config, error) {
 		IPHashSalt:             os.Getenv("IP_HASH_SALT"),
 		AnthropicKey:           os.Getenv("ANTHROPIC_API_KEY"),
 		AnthropicModel:         env("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
+		LLMURL:                 env("LLM_URL", "https://api.groq.com/openai/v1/chat/completions"),
+		LLMKey:                 os.Getenv("LLM_KEY"),
+		LLMModel:               env("LLM_MODEL", "openai/gpt-oss-120b"),
 		EmbedURL:               os.Getenv("EMBED_URL"),
 		EmbedKey:               os.Getenv("EMBED_API_KEY"),
 		EmbedModel:             env("EMBED_MODEL", "text-embedding-3-small"),

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -65,6 +66,64 @@ func (a *Anthropic) Complete(ctx context.Context, system, user string) (string, 
 		}
 	}
 	return strings.TrimSpace(b.String()), nil
+}
+
+// OpenAICompat calls any OpenAI-compatible /chat/completions endpoint (Groq, OpenRouter, Ollama).
+type OpenAICompat struct {
+	URL, Key, Model string
+	Client          *http.Client
+}
+
+func (o *OpenAICompat) Name() string { return o.Model }
+
+// thinkBlock strips the reasoning some models inline in their answer.
+var thinkBlock = regexp.MustCompile(`(?s)<think>.*?</think>`)
+
+func (o *OpenAICompat) Complete(ctx context.Context, system, user string) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"model":       o.Model,
+		"max_tokens":  1024,
+		"temperature": 0.2,
+		"messages": []map[string]string{
+			{"role": "system", "content": system},
+			{"role": "user", "content": user},
+		},
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.URL, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+o.Key)
+	c := o.Client
+	if c == nil {
+		c = &http.Client{Timeout: 60 * time.Second}
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return "", ErrBusy // provider quota reached; the visitor can retry
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("llm api: status %d", resp.StatusCode)
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", err
+	}
+	if len(out.Choices) == 0 {
+		return "", nil
+	}
+	return strings.TrimSpace(thinkBlock.ReplaceAllString(out.Choices[0].Message.Content, "")), nil
 }
 
 var promptUnescaper = strings.NewReplacer("&lt;", "<", "&gt;", ">", "&amp;", "&")

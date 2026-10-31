@@ -2,6 +2,13 @@ package rag
 
 import "testing"
 
+func TestNormalizeCitations(t *testing.T) {
+	got := normalizeCitations("ก【K-008】 ข [ K-001 ] ค [K-002]")
+	if want := "ก[K-008] ข [K-001] ค [K-002]"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestCitedHits(t *testing.T) {
 	hits := []Hit{{DocCode: "K-001"}, {DocCode: "K-003"}, {DocCode: "K-003", Lang: "zh"}, {DocCode: "K-004"}}
 	got := citedHits("Bring flowers [K-003]. Dress modestly [K-003].", hits, false)

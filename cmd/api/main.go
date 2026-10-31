@@ -81,7 +81,10 @@ func run(seedFile string) error {
 		minVec = rag.DefaultMinVecSimRemote
 	}
 	var llm rag.LLM = rag.Extractive{}
-	if cfg.AnthropicKey != "" {
+	switch {
+	case cfg.LLMKey != "":
+		llm = &rag.OpenAICompat{URL: cfg.LLMURL, Key: cfg.LLMKey, Model: cfg.LLMModel}
+	case cfg.AnthropicKey != "":
 		llm = &rag.Anthropic{Key: cfg.AnthropicKey, Model: cfg.AnthropicModel}
 	}
 	slog.Info("ai providers", "embedder", embedder.Name(), "llm", llm.Name())

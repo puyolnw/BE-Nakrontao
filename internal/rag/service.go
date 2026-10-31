@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,10 @@ var refusals = map[string]string{
 
 // Ask retrieves evidence and generates an answer. It is shared by the chatbot and the eval runner.
 func (s *Service) Ask(ctx context.Context, mode Mode, lang, question string, k int) (Answer, error) {
+	return s.ask(ctx, systemPrompt, mode, lang, question, k)
+}
+
+func (s *Service) ask(ctx context.Context, system string, mode Mode, lang, question string, k int) (Answer, error) {
 	start := time.Now()
 	hits, err := s.Retriever.Retrieve(ctx, mode, lang, question, k)
 	if err != nil {
@@ -95,10 +100,10 @@ func (s *Service) Ask(ctx context.Context, mode Mode, lang, question string, k i
 	}
 	defer release()
 	if mode == ModeNone {
-		text, err = s.LLM.Complete(ctx, systemPrompt+"\n- No passages are given in this condition: answer from general knowledge, and say NO_ANSWER if unsure.",
+		text, err = s.LLM.Complete(ctx, system+"\n- No passages are given in this condition: answer from general knowledge, and say NO_ANSWER if unsure.",
 			"<lang>"+langName(lang)+"</lang>\n<question>"+escapeForPrompt(question)+"</question>")
 	} else {
-		text, err = s.LLM.Complete(ctx, systemPrompt, buildPrompt(lang, question, hits))
+		text, err = s.LLM.Complete(ctx, system, buildPrompt(lang, question, hits))
 	}
 	if err != nil {
 		return Answer{}, err
@@ -106,12 +111,17 @@ func (s *Service) Ask(ctx context.Context, mode Mode, lang, question string, k i
 	if text == "" || strings.Contains(text, "NO_ANSWER") {
 		a.Answer, a.Refused = refusals[lang], true
 	} else {
-		a.Answer = text
-		a.Citations = citedHits(text, hits, s.LLM.Name() == "extractive")
+		a.Answer = normalizeCitations(text)
+		a.Citations = citedHits(a.Answer, hits, s.LLM.Name() == "extractive")
 	}
 	a.LatencyMS = int(time.Since(start).Milliseconds())
 	return a, nil
 }
+
+var citationMark = regexp.MustCompile(`[\[【]\s*([A-Za-z][A-Za-z0-9-]*)\s*[\]】]`)
+
+// normalizeCitations rewrites the variants models emit, such as 【K-001】 or [ K-001 ], to [K-001].
+func normalizeCitations(s string) string { return citationMark.ReplaceAllString(s, "[$1]") }
 
 // citedHits keeps only the passages the answer actually relies on: those whose id appears as
 // [DOC-CODE] in the generated text, or the quoted first passage for the extractive fallback.
@@ -172,22 +182,30 @@ func (s *Service) Chat(w http.ResponseWriter, r *http.Request) error {
 	if !s.PerClient.Allow(httpx.HashIP(s.Salt, httpx.ClientIP(r))) {
 		return httpx.TooMany()
 	}
-	if !s.Daily.Take() {
-		return &httpx.Error{Status: http.StatusServiceUnavailable, Code: "quota", Message: "daily AI quota reached, please try tomorrow"}
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
-	defer cancel()
-	a, err := s.Ask(ctx, ModeHybrid, in.Lang, in.Question, 4)
-	if err != nil {
-		return err
+	// PII never leaves for the LLM provider, and only the redacted text is logged.
+	question := RedactPII(in.Question)
+	in.Lang = detectLang(question, in.Lang)
+	var a Answer
+	if reply, ok := screen(in.Lang, question); ok {
+		a = Answer{Answer: reply, Refused: true}
+	} else {
+		if !s.Daily.Take() {
+			return &httpx.Error{Status: http.StatusServiceUnavailable, Code: "quota", Message: "daily AI quota reached, please try tomorrow"}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+		defer cancel()
+		var err error
+		if a, err = s.chatAnswer(ctx, in.Lang, question); err != nil {
+			return err
+		}
 	}
 	if a.Citations == nil {
 		a.Citations = []Hit{} // a refusal has none; the column is NOT NULL
 	}
 	cites, _ := json.Marshal(a.Citations)
-	err = s.DB.QueryRow(r.Context(), `INSERT INTO chat_logs(session_id, lang, question, answer, citations, refused, category, latency_ms)
+	err := s.DB.QueryRow(r.Context(), `INSERT INTO chat_logs(session_id, lang, question, answer, citations, refused, category, latency_ms)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		in.SessionID, in.Lang, RedactPII(in.Question), RedactPII(a.Answer), cites, a.Refused, Classify(in.Question), a.LatencyMS).Scan(&a.ID)
+		in.SessionID, in.Lang, question, RedactPII(a.Answer), cites, a.Refused, Classify(question), a.LatencyMS).Scan(&a.ID)
 	if err != nil {
 		return err
 	}
