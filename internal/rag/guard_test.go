@@ -24,13 +24,21 @@ func TestRedactPII(t *testing.T) {
 		"เลขบัตร 1-1037-00123-45-6":  "[id]",
 		"mail me: a.b@example.co.th": "[email]",
 		"card 4111 1111 1111 1111":   "[number]",
+		"08-1234-5678 ติดต่อ":        "[phone]",
+		"+66 81 234 5678 ค่ะ":        "[phone]",
+		"๐๘-๑๒๓๔-๕๖๗๘":               "[phone]",
+		"０８１２３４５６７８":                 "[phone]",
+		"身份证 11010519491231002X":     "[id]",
+		"บัญชี 012345678901":         "[number]",
+		"ไลน์ไอดี: tourist99":        "[contact]",
+		"LINE: shrine_news":          "[contact]",
 	}
 	for in, want := range cases {
 		got := RedactPII(in)
 		if !strings.Contains(got, want) {
 			t.Errorf("%q -> %q, want %s", in, got, want)
 		}
-		for _, d := range []string{"5678", "13812345678", "00123", "example", "1111 1111"} {
+		for _, d := range []string{"5678", "13812345678", "00123", "example", "1111 1111", "1234", "11010519491231002", "tourist99", "shrine_news", "012345678901"} {
 			if strings.Contains(in, d) && strings.Contains(got, d) {
 				t.Errorf("%q still leaks %q: %q", in, d, got)
 			}

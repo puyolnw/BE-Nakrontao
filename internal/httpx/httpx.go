@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"os"
@@ -61,8 +62,13 @@ func JSON(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-// Decode reads a size-limited JSON body and rejects unknown fields.
+// Decode reads a size-limited JSON body and rejects unknown fields. It requires application/json:
+// a cross-site form or text/plain post cannot send that type without a CORS preflight, which we
+// never grant, so public writes cannot be forged from another website's visitors' browsers.
 func Decode(w http.ResponseWriter, r *http.Request, dst any) error {
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
+		return &Error{Status: http.StatusUnsupportedMediaType, Code: "unsupported_media_type", Message: "request body must be application/json"}
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()

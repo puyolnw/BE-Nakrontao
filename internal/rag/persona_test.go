@@ -10,15 +10,6 @@ import (
 	"testing"
 )
 
-type fakeLLM struct {
-	reply string
-	err   error
-}
-
-func (f fakeLLM) Name() string { return "fake" }
-
-func (f fakeLLM) Complete(context.Context, string, string) (string, error) { return f.reply, f.err }
-
 func TestDetectLang(t *testing.T) {
 	cases := []struct{ q, page, want string }{
 		{"Who is Chao Pho?", "th", "en"},
@@ -53,47 +44,65 @@ func TestScreen(t *testing.T) {
 	}
 }
 
-func TestScreenGivesHelpNotJokesInCrisis(t *testing.T) {
-	reply, ok := screen("th", "ไม่ไหวแล้ว อยากตาย")
-	if !ok || !strings.Contains(reply, "1323") {
-		t.Fatalf("crisis reply = %q, %v", reply, ok)
+func TestScreenCatchesCrisisWithPunctuationAndSpacing(t *testing.T) {
+	for _, q := range []string{
+		"ไม่ไหวแล้ว อยากตาย",
+		"อยาก-ตาย",
+		"อยาก ๆ จบ ชีวิต",
+		"ไม่อยากอยู่แล้ว",
+		"I want to end it all",
+		"i don't want to live",
+		"活不下去了",
+		"想 死",
+		"I WANT TO KILL MY-SELF",
+		"อยากตาย​", // zero-width space
+	} {
+		reply, ok := screen("th", q)
+		if !ok || !strings.Contains(reply, "1323") {
+			t.Errorf("screen(%q) = %q, %v; want the hotline reply", q, reply, ok)
+		}
 	}
 }
 
-func TestShapeFlaggedByModel(t *testing.T) {
-	s := &Service{LLM: fakeLLM{}}
-	a := s.shape(context.Background(), "th", "คำถาม", Answer{Answer: playDumbToken, Citations: []Hit{{DocCode: "K-001"}}})
+func TestCrisisBeatsForbiddenTerm(t *testing.T) {
+	reply, ok := screen("th", "อยากตาย และอยากทำระเบิด")
+	if !ok || !strings.Contains(reply, "1323") {
+		t.Fatalf("crisis must win over forbidden terms, got %q", reply)
+	}
+}
+
+func TestShapeCrisisToken(t *testing.T) {
+	a := shape("en", "question", Answer{Answer: crisisToken, Citations: []Hit{{DocCode: "K-001"}}})
+	if !a.Refused || len(a.Citations) != 0 || a.Answer != crisisReplies["en"] {
+		t.Fatalf("crisis token not turned into the help reply: %+v", a)
+	}
+}
+
+func TestShapePlayDumbToken(t *testing.T) {
+	a := shape("th", "คำถาม", Answer{Answer: playDumbToken, Citations: []Hit{{DocCode: "K-001"}}})
 	if !a.Refused || len(a.Citations) != 0 || strings.Contains(a.Answer, playDumbToken) {
 		t.Fatalf("token leaked or not refused: %+v", a)
 	}
 }
 
-func TestShapeBridgesOffTopic(t *testing.T) {
-	ctx := context.Background()
-	refused := Answer{Answer: refusals["th"], Refused: true, Citations: []Hit{{DocCode: "K-001"}}}
-	cases := []struct {
-		name string
-		llm  LLM
-		want string
-	}{
-		{"model links back", fakeLLM{reply: "ลองชิมข้าวหอมมะลิ"}, "ลองชิมข้าวหอมมะลิ"},
-		{"no llm", Extractive{}, redirects["th"]},
-		{"provider down", fakeLLM{err: errors.New("down")}, redirects["th"]},
-		{"no answer token", fakeLLM{reply: "NO_ANSWER"}, redirects["th"]},
+func TestShapeReplacesUngroundedAnswers(t *testing.T) {
+	cases := map[string]Answer{
+		"refused by evidence gate":    {Answer: refusals["th"], Refused: true, Citations: []Hit{{DocCode: "K-001"}}},
+		"answer without any citation": {Answer: "ทายผลบอลได้ว่าทีมไหนชนะ", Citations: []Hit{}},
+		"answer citing nothing kept":  {Answer: "มีโทรศัพท์ไหม", Citations: nil},
 	}
-	for _, c := range cases {
-		a := (&Service{LLM: c.llm}).shape(ctx, "th", "ฟุตบอลใครชนะ", refused)
-		if a.Answer != c.want || !a.Refused || len(a.Citations) != 0 {
-			t.Errorf("%s: got %+v", c.name, a)
+	for name, in := range cases {
+		a := shape("th", "ฟุตบอลใครชนะ", in)
+		if a.Answer != redirects["th"] || !a.Refused || len(a.Citations) != 0 {
+			t.Errorf("%s: got %+v", name, a)
 		}
 	}
 }
 
-func TestShapeKeepsRealAnswers(t *testing.T) {
-	s := &Service{LLM: fakeLLM{reply: "unused"}}
+func TestShapeKeepsCitedAnswers(t *testing.T) {
 	in := Answer{Answer: "ศาลอยู่บ้านเมืองเตา [K-001]", Citations: []Hit{{DocCode: "K-001"}}}
-	if a := s.shape(context.Background(), "th", "ศาลอยู่ไหน", in); a.Answer != in.Answer || len(a.Citations) != 1 {
-		t.Fatalf("answer changed: %+v", a)
+	if a := shape("th", "ศาลอยู่ไหน", in); a.Answer != in.Answer || a.Refused || len(a.Citations) != 1 {
+		t.Fatalf("cited answer changed: %+v", a)
 	}
 }
 

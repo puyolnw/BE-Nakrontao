@@ -64,6 +64,32 @@ type DailyCap struct {
 
 func NewDailyCap(max int) *DailyCap { return &DailyCap{max: max} }
 
+// KeyedDailyCap allows max events per key per UTC day, e.g. per visitor. Counts reset at midnight UTC.
+type KeyedDailyCap struct {
+	mu     sync.Mutex
+	max    int
+	day    string
+	counts map[string]int
+}
+
+func NewKeyedDailyCap(max int) *KeyedDailyCap {
+	return &KeyedDailyCap{max: max, counts: map[string]int{}}
+}
+
+func (d *KeyedDailyCap) Allow(key string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	today := time.Now().UTC().Format("2006-01-02")
+	if today != d.day {
+		d.day, d.counts = today, map[string]int{}
+	}
+	if d.counts[key] >= d.max {
+		return false
+	}
+	d.counts[key]++
+	return true
+}
+
 func (d *DailyCap) Take() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
