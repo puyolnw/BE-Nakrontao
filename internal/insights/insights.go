@@ -14,6 +14,7 @@ import (
 
 	"github.com/reclover/sinakhontao/internal/auth"
 	"github.com/reclover/sinakhontao/internal/httpx"
+	"github.com/reclover/sinakhontao/internal/rag"
 )
 
 type Handler struct {
@@ -21,6 +22,8 @@ type Handler struct {
 	Salt  string
 	Track *httpx.Limiter
 	Votes *httpx.Limiter
+	// SurveyDaily caps submissions per visitor per day, so one person cannot stuff the research data.
+	SurveyDaily *httpx.KeyedDailyCap
 }
 
 // ---- public ----
@@ -55,7 +58,8 @@ func (h *Handler) SubmitSurvey(w http.ResponseWriter, r *http.Request) error {
 	if !in.Consent {
 		return httpx.BadRequest("consent is required before collecting research data")
 	}
-	if !h.Votes.Allow(httpx.HashIP(h.Salt, httpx.ClientIP(r))) {
+	visitor := httpx.HashIP(h.Salt, httpx.ClientIP(r))
+	if !h.Votes.Allow(visitor) || !h.SurveyDaily.Allow(visitor) {
 		return httpx.TooMany()
 	}
 	if in.Lang != "zh" && in.Lang != "en" {
@@ -64,10 +68,21 @@ func (h *Handler) SubmitSurvey(w http.ResponseWriter, r *http.Request) error {
 	if len(in.Answers) == 0 || len(in.Answers) > 100 {
 		return httpx.BadRequest("answers are required")
 	}
+	ids := make([]int64, 0, len(in.Answers))
 	for k, v := range in.Answers {
-		if _, err := strconv.ParseInt(k, 10, 64); err != nil || v < 1 || v > 5 {
+		id, err := strconv.ParseInt(k, 10, 64)
+		if err != nil || v < 1 || v > 5 {
 			return httpx.BadRequest("answers must map question ids to 1-5")
 		}
+		ids = append(ids, id)
+	}
+	// Only active questions from the database count, so forged ids cannot pollute the research data.
+	var known int
+	if err := h.DB.QueryRow(r.Context(), `SELECT count(*) FROM survey_questions WHERE active AND id = ANY($1)`, ids).Scan(&known); err != nil {
+		return err
+	}
+	if known != len(ids) {
+		return httpx.BadRequest("unknown survey question")
 	}
 	for k, v := range in.Respondent {
 		if !respondentKeys[k] || len(v) > 60 {
@@ -80,7 +95,7 @@ func (h *Handler) SubmitSurvey(w http.ResponseWriter, r *http.Request) error {
 	resp, _ := json.Marshal(in.Respondent)
 	ans, _ := json.Marshal(in.Answers)
 	if _, err := h.DB.Exec(r.Context(), `INSERT INTO survey_responses(lang, consent, respondent, answers, comment) VALUES ($1,true,$2,$3,$4)`,
-		in.Lang, resp, ans, strings.TrimSpace(in.Comment)); err != nil {
+		in.Lang, resp, ans, strings.TrimSpace(rag.RedactPII(in.Comment))); err != nil {
 		return err
 	}
 	return httpx.JSON(w, http.StatusCreated, map[string]bool{"ok": true})

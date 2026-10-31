@@ -30,13 +30,14 @@ const (
 )
 
 type Service struct {
-	DB        *pgxpool.Pool
-	Retriever *Retriever
-	LLM       LLM
-	Salt      string
-	MinVecSim float64 // 0 disables the semantic-only path (offline hash embedder)
-	PerClient *httpx.Limiter
-	Daily     *httpx.DailyCap
+	DB          *pgxpool.Pool
+	Retriever   *Retriever
+	LLM         LLM
+	Salt        string
+	MinVecSim   float64 // 0 disables the semantic-only path (offline hash embedder)
+	PerClient   *httpx.Limiter
+	Daily       *httpx.DailyCap      // whole site, per UTC day
+	ClientDaily *httpx.KeyedDailyCap // one visitor, per UTC day
 
 	indexMu   sync.Mutex
 	slots     chan struct{}
@@ -179,7 +180,8 @@ func (s *Service) Chat(w http.ResponseWriter, r *http.Request) error {
 	if len(in.SessionID) < 8 || len(in.SessionID) > 64 {
 		return httpx.BadRequest("invalid session_id")
 	}
-	if !s.PerClient.Allow(httpx.HashIP(s.Salt, httpx.ClientIP(r))) {
+	visitor := httpx.HashIP(s.Salt, httpx.ClientIP(r))
+	if !s.PerClient.Allow(visitor) {
 		return httpx.TooMany()
 	}
 	// PII never leaves for the LLM provider, and only the redacted text is logged.
@@ -189,6 +191,9 @@ func (s *Service) Chat(w http.ResponseWriter, r *http.Request) error {
 	if reply, ok := screen(in.Lang, question); ok {
 		a = Answer{Answer: reply, Refused: true}
 	} else {
+		if !s.ClientDaily.Allow(visitor) {
+			return &httpx.Error{Status: http.StatusTooManyRequests, Code: "daily_limit", Message: "daily question limit reached, please try tomorrow"}
+		}
 		if !s.Daily.Take() {
 			return &httpx.Error{Status: http.StatusServiceUnavailable, Code: "quota", Message: "daily AI quota reached, please try tomorrow"}
 		}

@@ -45,6 +45,10 @@ func run(seedFile string) error {
 	if err := httpx.SetTrustedProxies(cfg.TrustedProxy); err != nil {
 		return err
 	}
+	if cfg.TrustedProxy == "" {
+		// Without it every visitor behind the proxy shares one rate-limit bucket.
+		slog.Warn("TRUSTED_PROXY is empty: per-visitor rate limits will not work behind the proxy")
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -92,6 +96,7 @@ func run(seedFile string) error {
 	ragSvc := &rag.Service{
 		DB: pool, Retriever: &rag.Retriever{DB: pool, Embedder: embedder}, LLM: llm, Salt: cfg.IPHashSalt, MinVecSim: minVec,
 		PerClient: httpx.NewLimiter(cfg.ChatPerMinute, cfg.ChatPerMinute), Daily: httpx.NewDailyCap(cfg.ChatDailyCap),
+		ClientDaily: httpx.NewKeyedDailyCap(cfg.ChatPerClientDaily),
 	}
 	if err := ragSvc.Reindex(ctx); err != nil {
 		slog.Error("initial reindex failed", "err", err)
@@ -113,7 +118,7 @@ func run(seedFile string) error {
 	authSvc := auth.NewService(pool, cfg.SecureCookies)
 	editor := authSvc.Require("admin", "editor")
 	admin := authSvc.Require("admin")
-	ins := &insights.Handler{DB: pool, Salt: cfg.IPHashSalt, Track: httpx.NewLimiter(120, 60), Votes: httpx.NewLimiter(3, 3)}
+	ins := &insights.Handler{DB: pool, Salt: cfg.IPHashSalt, Track: httpx.NewLimiter(120, 60), Votes: httpx.NewLimiter(3, 3), SurveyDaily: httpx.NewKeyedDailyCap(5)}
 	ev := &eval.Handler{DB: pool, RAG: ragSvc}
 	rec := &recommend.Handler{DB: pool}
 	uploadDir := os.Getenv("UPLOAD_DIR")

@@ -23,10 +23,11 @@ type Config struct {
 	EmbedKey       string
 	EmbedModel     string
 
-	TrustedProxy  string // CIDRs of the reverse proxy, comma separated
-	RetentionDays int    // chat logs and page views older than this are deleted
-	ChatPerMinute int    // per client
-	ChatDailyCap  int    // global LLM calls per day, cost control
+	TrustedProxy       string // CIDRs of the reverse proxy, comma separated
+	RetentionDays      int    // chat logs and page views older than this are deleted
+	ChatPerMinute      int    // per client
+	ChatDailyCap       int    // global LLM calls per day, cost control
+	ChatPerClientDaily int    // LLM answers per visitor per day
 
 	BootstrapAdminEmail    string
 	BootstrapAdminPassword string
@@ -51,6 +52,7 @@ func Load() (Config, error) {
 		RetentionDays:          envInt("RETENTION_DAYS", 180),
 		ChatPerMinute:          envInt("CHAT_PER_MINUTE", 10),
 		ChatDailyCap:           envInt("CHAT_DAILY_CAP", 2000),
+		ChatPerClientDaily:     envInt("CHAT_PER_CLIENT_DAILY", 30),
 		BootstrapAdminEmail:    os.Getenv("BOOTSTRAP_ADMIN_EMAIL"),
 		BootstrapAdminPassword: os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"),
 	}

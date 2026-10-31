@@ -131,8 +131,12 @@ func (s *Service) Login(w http.ResponseWriter, r *http.Request) error {
 		return invalid
 	}
 	if !active || !VerifyPassword(hash, in.Password) {
-		_, err := s.DB.Exec(r.Context(), `UPDATE users SET failed_logins = failed_logins + 1,
-			locked_until = CASE WHEN failed_logins + 1 >= $2 THEN now() + $3::interval END WHERE id=$1`,
+		// Reaching the limit starts the lock and resets the counter, so a lock that expires leaves a clean slate
+		// and one wrong guess cannot relock the account.
+		_, err := s.DB.Exec(r.Context(), `UPDATE users SET
+			failed_logins = CASE WHEN failed_logins + 1 >= $2 THEN 0 ELSE failed_logins + 1 END,
+			locked_until = CASE WHEN failed_logins + 1 >= $2 THEN now() + $3::interval END
+			WHERE id=$1`,
 			id, maxFailures, lockFor.String())
 		if err != nil {
 			return err
@@ -197,7 +201,7 @@ func (s *Service) ChangePassword(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return httpx.BadRequest(err.Error())
 	}
-	if _, err := s.DB.Exec(r.Context(), `UPDATE users SET password_hash=$2 WHERE id=$1`, u.ID, nh); err != nil {
+	if _, err := s.DB.Exec(r.Context(), `UPDATE users SET password_hash=$2, failed_logins=0, locked_until=NULL WHERE id=$1`, u.ID, nh); err != nil {
 		return err
 	}
 	// Invalidate every other session of this user.
@@ -305,7 +309,7 @@ func (s *Service) UpdateUser(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return httpx.BadRequest(err.Error())
 		}
-		if _, err := s.DB.Exec(r.Context(), `UPDATE users SET password_hash=$2 WHERE id=$1`, id, hash); err != nil {
+		if _, err := s.DB.Exec(r.Context(), `UPDATE users SET password_hash=$2, failed_logins=0, locked_until=NULL WHERE id=$1`, id, hash); err != nil {
 			return err
 		}
 	}
