@@ -66,6 +66,10 @@ type Answer struct {
 	Retrieved []Hit  `json:"-"` // full ranked retrieval, used for research metrics
 	Refused   bool   `json:"refused"`
 	LatencyMS int    `json:"latency_ms"`
+	// Suggestions are follow-up questions for the visitor chat; the research Ask path leaves them empty.
+	Suggestions []string `json:"suggestions,omitempty"`
+	// Topic is the Classify category of the question; the web app maps it to fixed in-site links.
+	Topic string `json:"topic,omitempty"`
 }
 
 var refusals = map[string]string{
@@ -122,7 +126,22 @@ func (s *Service) ask(ctx context.Context, system string, mode Mode, lang, quest
 var citationMark = regexp.MustCompile(`[\[【]\s*([A-Za-z][A-Za-z0-9-]*)\s*[\]】]`)
 
 // normalizeCitations rewrites the variants models emit, such as 【K-001】 or [ K-001 ], to [K-001].
-func normalizeCitations(s string) string { return citationMark.ReplaceAllString(s, "[$1]") }
+func normalizeCitations(s string) string {
+	s = citationGroup.ReplaceAllStringFunc(s, func(m string) string {
+		var b strings.Builder
+		for _, id := range citationID.FindAllString(m, -1) {
+			b.WriteString("[" + id + "]")
+		}
+		return b.String()
+	})
+	return citationMark.ReplaceAllString(s, "[$1]")
+}
+
+// citationGroup matches several ids in one bracket, such as [K-008, K-011], which some models emit.
+var (
+	citationGroup = regexp.MustCompile(`[\[【]\s*[A-Za-z][A-Za-z0-9-]*(?:\s*[,，;、]\s*[A-Za-z][A-Za-z0-9-]*)+\s*[\]】]`)
+	citationID    = regexp.MustCompile(`[A-Za-z][A-Za-z0-9-]*`)
+)
 
 // citedHits keeps only the passages the answer actually relies on: those whose id appears as
 // [DOC-CODE] in the generated text, or the quoted first passage for the extractive fallback.
@@ -208,9 +227,13 @@ func (s *Service) Chat(w http.ResponseWriter, r *http.Request) error {
 		a.Citations = []Hit{} // a refusal has none; the column is NOT NULL
 	}
 	cites, _ := json.Marshal(a.Citations)
+	category := Classify(question)
+	if !a.Refused {
+		a.Topic = category
+	}
 	err := s.DB.QueryRow(r.Context(), `INSERT INTO chat_logs(session_id, lang, question, answer, citations, refused, category, latency_ms)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-		in.SessionID, in.Lang, question, RedactPII(a.Answer), cites, a.Refused, Classify(question), a.LatencyMS).Scan(&a.ID)
+		in.SessionID, in.Lang, question, RedactPII(a.Answer), cites, a.Refused, category, a.LatencyMS).Scan(&a.ID)
 	if err != nil {
 		return err
 	}

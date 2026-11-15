@@ -140,3 +140,36 @@ func TestOpenAICompatQuotaIsBusy(t *testing.T) {
 		t.Fatalf("err = %v, want ErrBusy", err)
 	}
 }
+
+func TestCleanForVisitorStripsMarkersAndMarkdown(t *testing.T) {
+	in := "<think>x</think>## ประวัติ\n**เจ้าพ่อ**ศรีนครเตา เป็นที่เคารพ [K-001] [FAQ-2].\n\n\n- ไหว้ด้วยดอกไม้ [K-003]"
+	got := cleanForVisitor(in)
+	want := "ประวัติ\nเจ้าพ่อศรีนครเตา เป็นที่เคารพ.\n\nไหว้ด้วยดอกไม้"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestSplitSuggestions(t *testing.T) {
+	in := "เจ้าพ่อเป็นที่เคารพ [K-001]\n\nNEXT: ไหว้ยังไง? || **มีงานวันไหน?** || ไหว้ยังไง? || " + strings.Repeat("ก", 100)
+	ans, next := splitSuggestions(in)
+	if ans != "เจ้าพ่อเป็นที่เคารพ [K-001]" {
+		t.Fatalf("answer = %q", ans)
+	}
+	if len(next) != 2 || next[0] != "ไหว้ยังไง?" || next[1] != "มีงานวันไหน?" {
+		t.Fatalf("suggestions = %q", next)
+	}
+	if a, n := splitSuggestions("ไม่มีบรรทัดแนะนำ"); a != "ไม่มีบรรทัดแนะนำ" || n != nil {
+		t.Fatalf("got %q %q", a, n)
+	}
+}
+
+func TestNormalizeCitationsSplitsGroups(t *testing.T) {
+	got := normalizeCitations("ก [K-008, K-011] ข 【K-1；FAQ-2】")
+	if got != "ก [K-008][K-011] ข 【K-1；FAQ-2】" && got != "ก [K-008][K-011] ข [K-1][FAQ-2]" {
+		t.Fatalf("got %q", got)
+	}
+	if !strings.Contains(cleanForVisitor(got), "ก ข") {
+		t.Fatalf("clean: %q", cleanForVisitor(got))
+	}
+}
