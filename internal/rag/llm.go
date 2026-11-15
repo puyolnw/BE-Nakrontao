@@ -27,7 +27,7 @@ func (a *Anthropic) Name() string { return a.Model }
 func (a *Anthropic) Complete(ctx context.Context, system, user string) (string, error) {
 	body, _ := json.Marshal(map[string]any{
 		"model":      a.Model,
-		"max_tokens": 1024,
+		"max_tokens": 1536,
 		"system":     system,
 		"messages":   []map[string]string{{"role": "user", "content": user}},
 	})
@@ -80,26 +80,32 @@ func (o *OpenAICompat) Name() string { return o.Model }
 var thinkBlock = regexp.MustCompile(`(?s)<think>.*?</think>`)
 
 func (o *OpenAICompat) Complete(ctx context.Context, system, user string) (string, error) {
-	body, _ := json.Marshal(map[string]any{
+	req := map[string]any{
 		"model":       o.Model,
-		"max_tokens":  1024,
+		"max_tokens":  4096,
 		"temperature": 0.2,
 		"messages": []map[string]string{
 			{"role": "system", "content": system},
 			{"role": "user", "content": user},
 		},
-	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, o.URL, bytes.NewReader(body))
+	}
+	// Gemini "thinks" by default and the thinking counts against max_tokens, which cut answers off
+	// mid-sentence and made replies take over 10 s. Grounded answers need little reasoning.
+	if strings.HasPrefix(o.Model, "gemini") {
+		req["reasoning_effort"] = "low"
+	}
+	body, _ := json.Marshal(req)
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, o.URL, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.Key)
+	hreq.Header.Set("Content-Type", "application/json")
+	hreq.Header.Set("Authorization", "Bearer "+o.Key)
 	c := o.Client
 	if c == nil {
 		c = &http.Client{Timeout: 60 * time.Second}
 	}
-	resp, err := c.Do(req)
+	resp, err := c.Do(hreq)
 	if err != nil {
 		return "", err
 	}
